@@ -17,9 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       method: req.method,
       headers: {
         "content-type": req.headers["content-type"] || "application/json",
-        // 👇 Pinecone typically uses Api-Key; if your endpoint expects Bearer, switch the header line below.
-        "Api-Key": API_KEY,
-        // "Authorization": `Bearer ${API_KEY}`, // <-- use this instead if required
+        "Authorization": `Bearer ${API_KEY}`,
+        "Api-Key": API_KEY, // Keep both headers for compatibility
       },
       body: ["GET","HEAD"].includes(req.method || "") ? undefined : req.body as any,
     });
