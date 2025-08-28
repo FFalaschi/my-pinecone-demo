@@ -75,15 +75,23 @@ export default function Home() {
         try {
           const json = JSON.parse(responseText);
           // Handle Pinecone Assistant chat completion response format
-          if (json.chat_completion?.choices?.[0]?.message?.content) {
-            responseText = json.chat_completion.choices[0].message.content;
-          } else if (json.answer) {
-            responseText = json.answer;
-          } else if (json.message) {
-            responseText = json.message;
-          } else if (json.error) {
-            throw new Error(json.error);
+          const content = json.chat_completion?.choices?.[0]?.message?.content;
+          const answer = json.answer;
+          const message = json.message;
+          const error = json.error;
+          
+          if (typeof content === 'string' && content.trim()) {
+            responseText = content;
+          } else if (typeof answer === 'string' && answer.trim()) {
+            responseText = answer;
+          } else if (typeof message === 'string' && message.trim()) {
+            responseText = message;
+          } else if (typeof error === 'string') {
+            throw new Error(error);
+          } else if (error && typeof error === 'object') {
+            throw new Error(JSON.stringify(error));
           } else {
+            // ✅ Ensure we always return a string, never an object
             responseText = JSON.stringify(json, null, 2);
           }
         } catch (parseError) {
@@ -96,7 +104,9 @@ export default function Home() {
         }
       }
       
-      setMessages(m => [...m, { role: "assistant" as const, content: responseText }]);
+      // ✅ Ensure responseText is always a string before setState
+      const safeResponseText = typeof responseText === 'string' ? responseText : JSON.stringify(responseText);
+      setMessages(m => [...m, { role: "assistant" as const, content: safeResponseText }]);
     } catch (error) {
       console.error("Error:", error);
       
@@ -129,7 +139,8 @@ export default function Home() {
       <div style={{flex:1, overflowY:"auto", border:"1px solid #eee", borderRadius:8, padding:12, marginTop:12}}>
         {messages.map((m,i)=>(
           <div key={i} style={{margin:"8px 0"}}>
-            <strong>{m.role === "user" ? "You" : "Assistant"}:</strong> <span>{m.content}</span>
+            <strong>{m.role === "user" ? "You" : "Assistant"}:</strong> 
+            <span>{typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}</span>
           </div>
         ))}
       </div>
