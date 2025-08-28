@@ -5,12 +5,15 @@ const ASSISTANT_PATH = "assistant/chat/icp-pulse-assistant"; // Use chat API ins
 export default function Home() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{role:"user"|"assistant",content:string}[]>([]);
+  const [loading, setLoading] = useState(false);
 
   async function send() {
+    if (loading || !input.trim()) return;
     const userMsg = { role: "user" as const, content: input };
     setMessages(m => [...m, userMsg]);
     setInput("");
 
+    setLoading(true);
     try {
       const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(ASSISTANT_PATH)}`, {
         method: "POST",
@@ -62,7 +65,12 @@ export default function Home() {
       setMessages(m => [...m, { role: "assistant" as const, content: responseText }]);
     } catch (error) {
       console.error("Error:", error);
-      setMessages(m => [...m, { role: "assistant" as const, content: "Error: Failed to get response" }]);
+      setMessages(m => [...m, { 
+        role: "assistant" as const, 
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to get response'}` 
+      }]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -84,7 +92,19 @@ export default function Home() {
           style={{flex:1, padding:10, border:"1px solid #ddd", borderRadius:8}}
           onKeyDown={e=>{ if(e.key==="Enter") send(); }}
         />
-        <button onClick={send} style={{padding:"10px 16px", borderRadius:8, border:"1px solid #222"}}>Send</button>
+        <button 
+          onClick={send} 
+          disabled={loading}
+          style={{
+            padding:"10px 16px", 
+            borderRadius:8, 
+            border:"1px solid #222",
+            opacity: loading ? 0.6 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {loading ? "Sending..." : "Send"}
+        </button>
       </div>
     </div>
   );

@@ -13,14 +13,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const url = `${HOST}/${Array.isArray(path) ? path.join("/") : path}`;
 
-    // Parse the request body to pass it properly
+    // Get request body properly
     let bodyData = null;
     if (!["GET","HEAD"].includes(req.method || "")) {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      bodyData = Buffer.concat(chunks).toString();
+      bodyData = JSON.stringify(req.body);
     }
 
     const upstream = await fetch(url, {
@@ -62,10 +58,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.end(buf);
     }
   } catch (e:any) {
-    res.status(500).json({ error: e?.message || "Proxy error" });
+    console.error("Pinecone API Error:", e);
+    res.status(500).json({ 
+      error: e?.message || "Proxy error", 
+      details: process.env.NODE_ENV === 'development' ? e?.stack : undefined 
+    });
   }
 }
 
 export const config = {
-  api: { bodyParser: false }, // lets us pass through streaming if needed
+  api: { 
+    bodyParser: {
+      sizeLimit: '1mb',
+    }
+  },
 };
