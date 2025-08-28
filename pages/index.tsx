@@ -7,7 +7,7 @@ export default function Home() {
   const [messages, setMessages] = useState<{role:"user"|"assistant",content:string}[]>([]);
 
   async function send() {
-    const userMsg = { role: "user", content: input };
+    const userMsg = { role: "user" as const, content: input };
     setMessages(m => [...m, userMsg]);
     setInput("");
 
@@ -19,7 +19,7 @@ export default function Home() {
     });
 
     const text = await resp.text(); // keep simple; adapt if JSON
-    setMessages(m => [...m, { role: "assistant", content: text }]);
+    setMessages(m => [...m, { role: "assistant" as const, content: text }]);
   }
 
   return (
