@@ -11,15 +11,50 @@ export default function Home() {
     setMessages(m => [...m, userMsg]);
     setInput("");
 
-    const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(ASSISTANT_PATH)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [...messages, userMsg] })
-      // ^ Adjust body schema to whatever your MCP endpoint expects
-    });
+    try {
+      const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(ASSISTANT_PATH)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ 
+          messages: [...messages, userMsg].map(m => ({
+            role: m.role,
+            content: m.content
+          })),
+          stream: false // Explicitly request non-streaming for now
+        })
+      });
 
-    const text = await resp.text(); // keep simple; adapt if JSON
-    setMessages(m => [...m, { role: "assistant" as const, content: text }]);
+      const contentType = resp.headers.get("content-type");
+      let responseText = "";
+      
+      if (contentType?.includes("text/event-stream")) {
+        // Handle streaming response
+        const reader = resp.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            responseText += decoder.decode(value, { stream: true });
+          }
+        }
+      } else {
+        // Handle regular response
+        responseText = await resp.text();
+        try {
+          const json = JSON.parse(responseText);
+          responseText = json.answer || json.message || JSON.stringify(json);
+        } catch {
+          // Keep responseText as is if not JSON
+        }
+      }
+      
+      setMessages(m => [...m, { role: "assistant" as const, content: responseText }]);
+    } catch (error) {
+      console.error("Error:", error);
+      setMessages(m => [...m, { role: "assistant" as const, content: "Error: Failed to get response" }]);
+    }
   }
 
   return (

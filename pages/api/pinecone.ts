@@ -13,24 +13,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const url = `${HOST}/${Array.isArray(path) ? path.join("/") : path}`;
 
+    // Parse the request body to pass it properly
+    let bodyData = null;
+    if (!["GET","HEAD"].includes(req.method || "")) {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      bodyData = Buffer.concat(chunks).toString();
+    }
+
     const upstream = await fetch(url, {
       method: req.method,
       headers: {
-        "content-type": req.headers["content-type"] || "application/json",
-        "Authorization": `Bearer ${API_KEY}`,
-        "Api-Key": API_KEY, // Keep both headers for compatibility
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream", // Accept both JSON and streaming
+        "Api-Key": API_KEY,
+        "X-Pinecone-API-Version": "2024-10", // Use latest API version
       },
-      body: ["GET","HEAD"].includes(req.method || "") ? undefined : req.body as any,
+      body: bodyData,
     });
 
-    // stream back transparently
+    // Handle response
+    const contentType = upstream.headers.get("content-type");
     res.status(upstream.status);
-    upstream.headers.forEach((v, k) => {
-      if (k.toLowerCase() === "transfer-encoding") return;
-      res.setHeader(k, v);
-    });
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.end(buf);
+    
+    if (contentType?.includes("text/event-stream")) {
+      // Handle streaming response
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      
+      const reader = upstream.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(decoder.decode(value, { stream: true }));
+        }
+      }
+      res.end();
+    } else {
+      // Handle regular JSON response
+      upstream.headers.forEach((v, k) => {
+        if (k.toLowerCase() === "transfer-encoding") return;
+        res.setHeader(k, v);
+      });
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.end(buf);
+    }
   } catch (e:any) {
     res.status(500).json({ error: e?.message || "Proxy error" });
   }
