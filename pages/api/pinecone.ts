@@ -27,9 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       method: req.method,
       headers: {
         "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream", // Accept both JSON and streaming
-        "Api-Key": API_KEY,
-        "X-Pinecone-API-Version": "2024-10", // Use latest API version
+        "Api-Key": API_KEY, // Assistant API uses Api-Key header
       },
       body: bodyData,
     });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const ASSISTANT_PATH = "mcp/assistants/icp-pulse-assistant"; // from your URL
+const ASSISTANT_PATH = "assistant/chat/icp-pulse-assistant"; // Use chat API instead of MCP
 
 export default function Home() {
   const [input, setInput] = useState("");
@@ -20,7 +20,7 @@ export default function Home() {
             role: m.role,
             content: m.content
           })),
-          stream: false // Explicitly request non-streaming for now
+          stream: false
         })
       });
 
@@ -44,7 +44,16 @@ export default function Home() {
         responseText = await resp.text();
         try {
           const json = JSON.parse(responseText);
-          responseText = json.answer || json.message || JSON.stringify(json);
+          // Handle Pinecone Assistant chat completion response format
+          if (json.chat_completion?.choices?.[0]?.message?.content) {
+            responseText = json.chat_completion.choices[0].message.content;
+          } else if (json.answer) {
+            responseText = json.answer;
+          } else if (json.message) {
+            responseText = json.message;
+          } else {
+            responseText = JSON.stringify(json, null, 2);
+          }
         } catch {
           // Keep responseText as is if not JSON
         }
