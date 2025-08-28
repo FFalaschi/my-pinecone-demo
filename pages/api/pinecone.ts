@@ -5,62 +5,65 @@ const HOST = process.env.PINECONE_HOST!; // e.g. https://prod-1-data.ke.pinecone
 const API_KEY = process.env.PINECONE_API_KEY!; // set in Vercel env
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // ✅ Input validation
+  if (!req.body) {
+    return res.status(400).json({ error: "No request body provided" });
+  }
+  
+  if (!HOST || !API_KEY) {
+    console.error("Missing configuration:", { HOST: !!HOST, API_KEY: !!API_KEY });
+    return res.status(500).json({ error: "Server not configured properly" });
+  }
+
   try {
     const { path = "" } = req.query;
-    if (!HOST || !API_KEY) {
-      res.status(500).json({ error: "Server not configured" });
-      return;
-    }
     const url = `${HOST}/${Array.isArray(path) ? path.join("/") : path}`;
-
-    // Get request body properly
-    let bodyData = null;
-    if (!["GET","HEAD"].includes(req.method || "")) {
-      bodyData = JSON.stringify(req.body);
-    }
+    
+    console.log("Making request to:", url);
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
 
     const upstream = await fetch(url, {
-      method: req.method,
+      method: req.method || 'POST',
       headers: {
         "Content-Type": "application/json",
-        "Api-Key": API_KEY, // Assistant API uses Api-Key header
+        "Api-Key": API_KEY,
       },
-      body: bodyData,
+      body: JSON.stringify(req.body),
     });
 
-    // Handle response
-    const contentType = upstream.headers.get("content-type");
-    res.status(upstream.status);
+    console.log("Response status:", upstream.status);
     
-    if (contentType?.includes("text/event-stream")) {
-      // Handle streaming response
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      
-      const reader = upstream.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(decoder.decode(value, { stream: true }));
-        }
-      }
-      res.end();
-    } else {
-      // Handle regular JSON response
-      upstream.headers.forEach((v, k) => {
-        if (k.toLowerCase() === "transfer-encoding") return;
-        res.setHeader(k, v);
+    // ✅ Check for upstream errors
+    if (!upstream.ok) {
+      const errorText = await upstream.text();
+      console.error("Upstream error:", upstream.status, errorText);
+      return res.status(upstream.status).json({
+        error: `Pinecone API error: ${upstream.status} ${upstream.statusText}`,
+        details: errorText
       });
-      const buf = Buffer.from(await upstream.arrayBuffer());
-      res.end(buf);
     }
-  } catch (e:any) {
-    console.error("Pinecone API Error:", e);
+    
+    // ✅ Handle response simply and safely
+    try {
+      const data = await upstream.json();
+      console.log("Response data:", JSON.stringify(data, null, 2));
+      res.status(200).json(data);
+    } catch (jsonError) {
+      // If not JSON, try to get text
+      const text = await upstream.text();
+      console.log("Non-JSON response:", text);
+      res.status(200).json({ message: text });
+    }
+  } catch (e: any) {
+    console.error("Pinecone API Error:", {
+      message: e?.message,
+      stack: e?.stack,
+      name: e?.name
+    });
+    
     res.status(500).json({ 
-      error: e?.message || "Proxy error", 
+      error: e?.message || "Internal server error", 
+      type: e?.name || "UnknownError",
       details: process.env.NODE_ENV === 'development' ? e?.stack : undefined 
     });
   }

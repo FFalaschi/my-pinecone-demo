@@ -8,43 +8,70 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   async function send() {
-    if (loading || !input.trim()) return;
-    const userMsg = { role: "user" as const, content: input };
-    setMessages(m => [...m, userMsg]);
+    const trimmedInput = input.trim();
+    if (loading || !trimmedInput) return;
+    
+    // ✅ Basic input validation
+    if (trimmedInput.length > 1000) {
+      setMessages(m => [...m, { 
+        role: "assistant" as const, 
+        content: "❌ Message too long. Please keep it under 1000 characters." 
+      }]);
+      return;
+    }
+    
+    const userMsg = { role: "user" as const, content: trimmedInput };
+    const currentMessages = [...messages, userMsg]; // ✅ Use computed value
+    setMessages(currentMessages);
     setInput("");
-
     setLoading(true);
+
     try {
+      // ✅ Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(ASSISTANT_PATH)}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ 
-          messages: [...messages, userMsg].map(m => ({
+          messages: currentMessages.map(m => ({ // ✅ Use computed messages
             role: m.role,
             content: m.content
           })),
           stream: false
-        })
+        }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
+
+      // ✅ Add proper error checking
+      if (!resp.ok) {
+        throw new Error(`API Error: ${resp.status} ${resp.statusText}`);
+      }
 
       const contentType = resp.headers.get("content-type");
       let responseText = "";
       
       if (contentType?.includes("text/event-stream")) {
-        // Handle streaming response
+        // Handle streaming response with null checks
         const reader = resp.body?.getReader();
-        const decoder = new TextDecoder();
+        if (!reader) throw new Error("No response body reader available");
         
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            responseText += decoder.decode(value, { stream: true });
-          }
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          responseText += decoder.decode(value, { stream: true });
         }
       } else {
         // Handle regular response
         responseText = await resp.text();
+        if (!responseText) {
+          throw new Error("Empty response from server");
+        }
+        
         try {
           const json = JSON.parse(responseText);
           // Handle Pinecone Assistant chat completion response format
@@ -54,20 +81,42 @@ export default function Home() {
             responseText = json.answer;
           } else if (json.message) {
             responseText = json.message;
+          } else if (json.error) {
+            throw new Error(json.error);
           } else {
             responseText = JSON.stringify(json, null, 2);
           }
-        } catch {
-          // Keep responseText as is if not JSON
+        } catch (parseError) {
+          // If not JSON, check if it's a useful text response
+          if (responseText.length < 500 && !responseText.includes('<')) {
+            // Keep as is if it's short and not HTML
+          } else {
+            throw new Error(`Invalid response format: ${parseError instanceof Error ? parseError.message : 'Parse failed'}`);
+          }
         }
       }
       
       setMessages(m => [...m, { role: "assistant" as const, content: responseText }]);
     } catch (error) {
       console.error("Error:", error);
+      
+      let errorMessage = "Failed to get response";
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = "Request timed out after 30 seconds. Please try again.";
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorMessage = "Network error. Please check your connection and try again.";
+        } else if (error.message.includes('API Error')) {
+          errorMessage = `Server error: ${error.message}`;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       setMessages(m => [...m, { 
         role: "assistant" as const, 
-        content: `Error: ${error instanceof Error ? error.message : 'Failed to get response'}` 
+        content: `❌ ${errorMessage}` 
       }]);
     } finally {
       setLoading(false);
@@ -90,7 +139,12 @@ export default function Home() {
           onChange={e=>setInput(e.target.value)}
           placeholder="Ask something…"
           style={{flex:1, padding:10, border:"1px solid #ddd", borderRadius:8}}
-          onKeyDown={e=>{ if(e.key==="Enter") send(); }}
+          onKeyDown={e=>{ 
+            if(e.key==="Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send(); 
+            }
+          }}
         />
         <button 
           onClick={send} 
