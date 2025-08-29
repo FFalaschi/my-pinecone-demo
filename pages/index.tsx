@@ -74,24 +74,23 @@ export default function Home() {
         
         try {
           const json = JSON.parse(responseText);
-          // Handle Pinecone Assistant chat completion response format
-          const content = json.chat_completion?.choices?.[0]?.message?.content;
+          // Handle Pinecone Assistant response format
+          // Based on actual response: { message: { role: "assistant", content: "..." }, ... }
+          const messageContent = json.message?.content;
           const answer = json.answer;
-          const message = json.message;
           const error = json.error;
           
-          if (typeof content === 'string' && content.trim()) {
-            responseText = content;
+          if (typeof messageContent === 'string' && messageContent.trim()) {
+            responseText = messageContent;
           } else if (typeof answer === 'string' && answer.trim()) {
             responseText = answer;
-          } else if (typeof message === 'string' && message.trim()) {
-            responseText = message;
           } else if (typeof error === 'string') {
             throw new Error(error);
           } else if (error && typeof error === 'object') {
             throw new Error(JSON.stringify(error));
           } else {
-            // ✅ Ensure we always return a string, never an object
+            // ✅ Fallback: show formatted JSON if unexpected format
+            console.log("Unexpected response format:", json);
             responseText = JSON.stringify(json, null, 2);
           }
         } catch (parseError) {
