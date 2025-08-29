@@ -189,7 +189,7 @@ export default function Home() {
             fontWeight: "600",
             color: "#1f2937",
             margin: 0
-          }}>ICP Pulse Assistant</h1>
+          }}>Chat with your data</h1>
         </div>
       </div>
 
