@@ -11,8 +11,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   
   if (!HOST || !API_KEY) {
-    console.error("Missing configuration:", { HOST: !!HOST, API_KEY: !!API_KEY });
-    return res.status(500).json({ error: "Server not configured properly" });
+    console.error("Missing environment variables:", { 
+      HOST: HOST ? "Set" : "Missing",
+      API_KEY: API_KEY ? "Set (hidden)" : "Missing",
+      PINECONE_HOST: process.env.PINECONE_HOST ? "Set" : "Missing",
+      PINECONE_API_KEY: process.env.PINECONE_API_KEY ? "Set (hidden)" : "Missing"
+    });
+    return res.status(500).json({ 
+      error: "Server not configured properly. Environment variables missing.",
+      details: {
+        HOST: !!HOST,
+        API_KEY: !!API_KEY
+      }
+    });
   }
 
   try {
