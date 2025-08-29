@@ -33,9 +33,13 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Initialize custom assistant on first load
+  // Initialize assistant - skip creation for now, use existing MCP endpoint
   useEffect(() => {
-    initializeAssistant();
+    setAssistantReady(true);
+    setMessages(m => [...m, { 
+      role: "assistant" as const, 
+      content: "🤖 Ready to chat! Using your existing Pinecone assistant." 
+    }]);
   }, []);
 
   async function initializeAssistant() {
@@ -128,7 +132,7 @@ export default function Home() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(`assistant/chat/${CUSTOM_ASSISTANT_NAME}`)}`, {
+      const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(`mcp/assistants/icp-pulse-assistant`)}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ 
