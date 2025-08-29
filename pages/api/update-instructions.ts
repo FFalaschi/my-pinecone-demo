@@ -1,16 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 const API_KEY = process.env.PINECONE_API_KEY!;
-const PINECONE_API_BASE = "https://api.pinecone.io";
+const HOST = process.env.PINECONE_HOST!;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!API_KEY) {
+  if (!HOST || !API_KEY) {
     return res.status(500).json({ 
-      error: "PINECONE_API_KEY environment variable missing"
+      error: "Server not configured properly. Environment variables missing."
     });
   }
 
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log("Updating assistant instructions:", assistantName);
     console.log("New instructions:", instructions);
 
-    const response = await fetch(`${PINECONE_API_BASE}/assistants/${assistantName}`, {
+    const response = await fetch(`${HOST}/assistants/${assistantName}`, {
       method: 'PATCH',
       headers: {
         "Api-Key": API_KEY,
