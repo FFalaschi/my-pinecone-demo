@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const ASSISTANT_PATH = "assistant/chat/icp-pulse-assistant"; // Use chat API instead of MCP
+const CUSTOM_ASSISTANT_NAME = "wynter-survey-demo"; // Custom assistant with updateable instructions
 
 export default function Home() {
   const [input, setInput] = useState("");
@@ -10,6 +10,8 @@ export default function Home() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [instructions, setInstructions] = useState("You are an AI assistant that helps analyze survey data and research insights. Be helpful, accurate, and concise in your responses.");
   const [instructionsLoading, setInstructionsLoading] = useState(false);
+  const [assistantReady, setAssistantReady] = useState(false);
+  const [initializingAssistant, setInitializingAssistant] = useState(false);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -31,6 +33,45 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loading]);
 
+  // Initialize custom assistant on first load
+  useEffect(() => {
+    initializeAssistant();
+  }, []);
+
+  async function initializeAssistant() {
+    setInitializingAssistant(true);
+    try {
+      // Try to create custom assistant (will succeed only if it doesn't exist)
+      const response = await fetch('/api/assistant/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistantName: CUSTOM_ASSISTANT_NAME,
+          instructions: instructions
+        })
+      });
+
+      if (response.ok || response.status === 409) { // 409 = already exists
+        setAssistantReady(true);
+        setMessages(m => [...m, { 
+          role: "assistant" as const, 
+          content: "🤖 Custom assistant ready! You can now update instructions in real-time." 
+        }]);
+      } else {
+        throw new Error(`Failed to initialize: ${response.status}`);
+      }
+    } catch (error) {
+      console.error("Assistant initialization failed:", error);
+      setMessages(m => [...m, { 
+        role: "assistant" as const, 
+        content: `⚠️ Using fallback mode. Assistant creation failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      }]);
+      setAssistantReady(true); // Allow fallback usage
+    } finally {
+      setInitializingAssistant(false);
+    }
+  }
+
   async function updateInstructions() {
     if (instructionsLoading || !instructions.trim()) return;
     
@@ -40,7 +81,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          assistantPath: ASSISTANT_PATH,
+          assistantName: CUSTOM_ASSISTANT_NAME,
           instructions: instructions.trim() 
         })
       });
@@ -65,7 +106,7 @@ export default function Home() {
 
   async function send() {
     const trimmedInput = input.trim();
-    if (loading || !trimmedInput) return;
+    if (loading || !trimmedInput || !assistantReady) return;
     
     // ✅ Basic input validation
     if (trimmedInput.length > 1000) {
@@ -87,7 +128,7 @@ export default function Home() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(ASSISTANT_PATH)}`, {
+      const resp = await fetch(`/api/pinecone?path=${encodeURIComponent(`assistant/chat/${CUSTOM_ASSISTANT_NAME}`)}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ 
@@ -417,8 +458,8 @@ export default function Home() {
             <input
               value={input}
               onChange={e=>setInput(e.target.value)}
-              placeholder="Ask about ICP research, pain points, or any insights…"
-              disabled={loading}
+              placeholder={initializingAssistant ? "Initializing assistant..." : assistantReady ? "Ask about ICP research, pain points, or any insights…" : "Assistant not ready"}
+              disabled={loading || initializingAssistant || !assistantReady}
               style={{
                 flex: 1,
                 border: "none",
@@ -428,7 +469,7 @@ export default function Home() {
                 padding: "8px 0",
                 backgroundColor: "transparent",
                 color: "#1f2937",
-                opacity: loading ? 0.6 : 1
+                opacity: (loading || initializingAssistant || !assistantReady) ? 0.6 : 1
               }}
               onKeyDown={e=>{ 
                 if(e.key==="Enter" && !e.shiftKey) {
@@ -439,20 +480,20 @@ export default function Home() {
             />
             <button 
               onClick={send} 
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || initializingAssistant || !assistantReady}
               style={{
-                backgroundColor: (loading || !input.trim()) ? "#e5e7eb" : "#002BFF",
-                color: (loading || !input.trim()) ? "#9ca3af" : "white",
+                backgroundColor: (loading || !input.trim() || initializingAssistant || !assistantReady) ? "#e5e7eb" : "#002BFF",
+                color: (loading || !input.trim() || initializingAssistant || !assistantReady) ? "#9ca3af" : "white",
                 border: "none",
                 borderRadius: "8px",
                 padding: "8px 16px",
                 fontSize: "14px",
                 fontWeight: "500",
-                cursor: (loading || !input.trim()) ? "not-allowed" : "pointer",
+                cursor: (loading || !input.trim() || initializingAssistant || !assistantReady) ? "not-allowed" : "pointer",
                 transition: "all 0.2s ease"
               }}
             >
-              {loading ? "Sending" : "Send"}
+              {initializingAssistant ? "Initializing..." : loading ? "Sending" : "Send"}
             </button>
           </div>
         </div>

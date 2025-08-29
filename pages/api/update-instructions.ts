@@ -1,47 +1,63 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-const HOST = process.env.PINECONE_HOST!;
 const API_KEY = process.env.PINECONE_API_KEY!;
+const PINECONE_API_BASE = "https://api.pinecone.io";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!HOST || !API_KEY) {
+  if (!API_KEY) {
     return res.status(500).json({ 
-      error: "Server not configured properly. Environment variables missing."
+      error: "PINECONE_API_KEY environment variable missing"
     });
   }
 
   try {
-    const { assistantPath, instructions } = req.body;
+    const { assistantName, instructions } = req.body;
     
     if (!instructions || typeof instructions !== 'string') {
       return res.status(400).json({ error: 'Instructions are required' });
     }
 
-    // For now, simulate the update since we need to test the correct Pinecone API structure
-    // TODO: Replace with actual Pinecone Assistant API when endpoint is confirmed
-    
-    console.log("Simulating instruction update for:", assistantPath);
+    if (!assistantName) {
+      return res.status(400).json({ error: 'Assistant name is required' });
+    }
+
+    console.log("Updating assistant instructions:", assistantName);
     console.log("New instructions:", instructions);
-    
-    // Simulate a successful update with delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const result = {
-      success: true,
-      assistant: {
-        name: assistantPath.split('/').pop(),
+
+    const response = await fetch(`${PINECONE_API_BASE}/assistants/${assistantName}`, {
+      method: 'PATCH',
+      headers: {
+        "Api-Key": API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
         instructions: instructions,
-        updatedAt: new Date().toISOString()
-      }
-    };
+        metadata: {
+          lastUpdated: new Date().toISOString(),
+          updatedBy: "wynter-poc"
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Failed to update assistant:", response.status, errorText);
+      return res.status(response.status).json({
+        error: `Failed to update assistant: ${response.status} ${response.statusText}`,
+        details: errorText
+      });
+    }
+
+    const result = await response.json();
+    console.log("Assistant updated successfully:", result);
     
     res.status(200).json({ 
       success: true, 
-      updatedAt: new Date().toISOString(),
+      updatedAt: result.updated_at || new Date().toISOString(),
       assistant: result 
     });
 
