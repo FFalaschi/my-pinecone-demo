@@ -7,6 +7,9 @@ export default function Home() {
   const [messages, setMessages] = useState<{role:"user"|"assistant",content:string}[]>([]);
   const [loading, setLoading] = useState(false);
   const [dots, setDots] = useState("");
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [instructions, setInstructions] = useState("You are an AI assistant that helps analyze survey data and research insights. Be helpful, accurate, and concise in your responses.");
+  const [instructionsLoading, setInstructionsLoading] = useState(false);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -27,6 +30,38 @@ export default function Home() {
     }, 500);
     return () => clearInterval(interval);
   }, [loading]);
+
+  async function updateInstructions() {
+    if (instructionsLoading || !instructions.trim()) return;
+    
+    setInstructionsLoading(true);
+    try {
+      const response = await fetch('/api/update-instructions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          assistantPath: ASSISTANT_PATH,
+          instructions: instructions.trim() 
+        })
+      });
+      
+      if (response.ok) {
+        setMessages(m => [...m, { 
+          role: "assistant" as const, 
+          content: "✅ Instructions updated successfully! Try asking a question to see the new behavior." 
+        }]);
+      } else {
+        throw new Error(`Failed to update: ${response.status}`);
+      }
+    } catch (error) {
+      setMessages(m => [...m, { 
+        role: "assistant" as const, 
+        content: `❌ Failed to update instructions: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      }]);
+    } finally {
+      setInstructionsLoading(false);
+    }
+  }
 
   async function send() {
     const trimmedInput = input.trim();
@@ -190,8 +225,92 @@ export default function Home() {
             color: "#1f2937",
             margin: 0
           }}>Chat with your data</h1>
+          <button
+            onClick={() => setShowInstructions(!showInstructions)}
+            style={{
+              backgroundColor: "transparent",
+              border: "1px solid #e5e7eb",
+              borderRadius: "6px",
+              padding: "6px 12px",
+              fontSize: "12px",
+              color: "#6b7280",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            ⚙️ {showInstructions ? "Hide" : "Edit"} Instructions
+          </button>
         </div>
       </div>
+
+      {/* Instructions Panel */}
+      {showInstructions && (
+        <div style={{
+          backgroundColor: "#f8fafc",
+          borderBottom: "1px solid #e5e7eb",
+          padding: "16px 24px"
+        }}>
+          <div style={{
+            maxWidth: "800px",
+            margin: "0 auto"
+          }}>
+            <div style={{
+              marginBottom: "12px",
+              fontSize: "14px",
+              fontWeight: "600",
+              color: "#374151"
+            }}>
+              Assistant Instructions
+            </div>
+            <textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="Enter instructions for how the assistant should behave..."
+              style={{
+                width: "100%",
+                minHeight: "80px",
+                padding: "12px",
+                border: "1px solid #d1d5db",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontFamily: "inherit",
+                resize: "vertical",
+                outline: "none"
+              }}
+            />
+            <div style={{
+              display: "flex",
+              gap: "8px",
+              marginTop: "12px",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div style={{
+                fontSize: "12px",
+                color: "#6b7280"
+              }}>
+                Changes apply immediately to future conversations
+              </div>
+              <button
+                onClick={updateInstructions}
+                disabled={instructionsLoading || !instructions.trim()}
+                style={{
+                  backgroundColor: (instructionsLoading || !instructions.trim()) ? "#e5e7eb" : "#002BFF",
+                  color: (instructionsLoading || !instructions.trim()) ? "#9ca3af" : "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: "500",
+                  cursor: (instructionsLoading || !instructions.trim()) ? "not-allowed" : "pointer"
+                }}
+              >
+                {instructionsLoading ? "Updating..." : "Update Instructions"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chat Container */}
       <div style={{
