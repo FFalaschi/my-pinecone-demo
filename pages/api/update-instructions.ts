@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 const API_KEY = process.env.PINECONE_API_KEY!;
 const HOST = process.env.PINECONE_HOST!;
+const CONTROL_PLANE_URL = "https://api.pinecone.io";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -28,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log("Updating assistant instructions:", assistantName);
     console.log("New instructions:", instructions);
 
-    const response = await fetch(`${HOST}/assistants/${assistantName}`, {
+    const response = await fetch(`${CONTROL_PLANE_URL}/assistants/${assistantName}`, {
       method: 'PATCH',
       headers: {
         "Api-Key": API_KEY,
