@@ -175,16 +175,15 @@ export default function Home() {
           alignItems: "center",
           gap: "12px"
         }}>
-          <div style={{
-            width: "32px",
-            height: "32px",
-            backgroundColor: "#002BFF",
-            borderRadius: "8px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "18px"
-          }}>🌲</div>
+          <img 
+            src="https://cdn.prod.website-files.com/615addcd910b6e8f65bde306/615addcd910b6e31f6bde33e_default.svg"
+            alt="Wynter Logo"
+            style={{
+              height: "32px",
+              width: "auto",
+              objectFit: "contain"
+            }}
+          />
           <h1 style={{
             fontSize: "20px",
             fontWeight: "600",
