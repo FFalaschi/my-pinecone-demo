@@ -1,87 +1,101 @@
 // pages/api/pinecone.ts
 import type { NextApiRequest, NextApiResponse } from "next";
+import { Pinecone } from "@pinecone-database/pinecone";
 
-const HOST = process.env.PINECONE_HOST!; // e.g. https://prod-1-data.ke.pinecone.io
-const API_KEY = process.env.PINECONE_API_KEY!; // set in Vercel env
+const API_KEY = process.env.PINECONE_API_KEY!;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // ✅ Input validation
   if (!req.body) {
     return res.status(400).json({ error: "No request body provided" });
   }
-  
-  if (!HOST || !API_KEY) {
-    console.error("Missing environment variables:", { 
-      HOST: HOST ? "Set" : "Missing",
-      API_KEY: API_KEY ? "Set (hidden)" : "Missing",
-      PINECONE_HOST: process.env.PINECONE_HOST ? "Set" : "Missing",
-      PINECONE_API_KEY: process.env.PINECONE_API_KEY ? "Set (hidden)" : "Missing"
-    });
-    return res.status(500).json({ 
-      error: "Server not configured properly. Environment variables missing.",
-      details: {
-        HOST: !!HOST,
-        API_KEY: !!API_KEY
-      }
+
+  if (!API_KEY) {
+    console.error("Missing PINECONE_API_KEY environment variable");
+    return res.status(500).json({
+      error: "Server not configured properly. PINECONE_API_KEY is missing."
     });
   }
 
   try {
+    // Extract assistant name from path query parameter
+    // Expected format: "assistant/chat/{assistant-name}" or "assistants/chat/{assistant-name}"
     const { path = "" } = req.query;
-    const url = `${HOST}/${Array.isArray(path) ? path.join("/") : path}`;
-    
-    console.log("Making request to:", url);
-    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    const pathStr = Array.isArray(path) ? path.join("/") : path;
 
-    const upstream = await fetch(url, {
-      method: req.method || 'POST',
-      headers: {
-        "Content-Type": "application/json",
-        "Api-Key": API_KEY,
-      },
-      body: JSON.stringify(req.body),
-    });
+    console.log("Received path:", pathStr);
 
-    console.log("Response status:", upstream.status);
-    
-    // ✅ Check for upstream errors
-    if (!upstream.ok) {
-      const errorText = await upstream.text();
-      console.error("Upstream error:", upstream.status, errorText);
-      return res.status(upstream.status).json({
-        error: `Pinecone API error: ${upstream.status} ${upstream.statusText}`,
-        details: errorText
+    // Parse assistant name from path
+    // Supports both "assistant/chat/name" and "assistants/chat/name"
+    const pathMatch = pathStr.match(/assistants?\/chat\/([^\/]+)/);
+    if (!pathMatch || !pathMatch[1]) {
+      return res.status(400).json({
+        error: "Invalid path format. Expected: assistant/chat/{assistant-name} or assistants/chat/{assistant-name}",
+        receivedPath: pathStr
       });
     }
-    
-    // ✅ Handle response simply and safely
-    try {
-      const data = await upstream.json();
-      console.log("Response data:", JSON.stringify(data, null, 2));
-      res.status(200).json(data);
-    } catch (jsonError) {
-      // If not JSON, try to get text
-      const text = await upstream.text();
-      console.log("Non-JSON response:", text);
-      res.status(200).json({ message: text });
+
+    const assistantName = pathMatch[1];
+    console.log("Assistant name:", assistantName);
+
+    // Validate request body has messages
+    const { messages, stream = false } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({
+        error: "Request body must include 'messages' array"
+      });
     }
+
+    // Initialize Pinecone client
+    const pc = new Pinecone({ apiKey: API_KEY });
+
+    // Get the assistant
+    const assistant = pc.Assistant(assistantName);
+
+    console.log("Calling Pinecone Assistant chat with messages:", JSON.stringify(messages, null, 2));
+
+    // Call assistant chat (non-streaming for now)
+    // Use chatCompletion for OpenAI-compatible format
+    const chatResponse = await assistant.chatCompletion({
+      messages: messages,
+    });
+
+    console.log("Assistant response:", JSON.stringify(chatResponse, null, 2));
+
+    // Return the response in a format compatible with the frontend
+    // The chatCompletion response has format: { id, choices, model, usage }
+    // Extract the assistant's message from choices[0].message
+    res.status(200).json({
+      message: chatResponse.choices?.[0]?.message || {
+        role: "assistant",
+        content: "No response generated"
+      },
+      id: chatResponse.id,
+      model: chatResponse.model,
+      usage: chatResponse.usage
+    });
+
   } catch (e: any) {
-    console.error("Pinecone API Error:", {
+    console.error("Pinecone Assistant Error:", {
       message: e?.message,
       stack: e?.stack,
-      name: e?.name
+      name: e?.name,
+      status: e?.status
     });
-    
-    res.status(500).json({ 
-      error: e?.message || "Internal server error", 
-      type: e?.name || "UnknownError",
-      details: process.env.NODE_ENV === 'development' ? e?.stack : undefined 
+
+    // Check if it's a Pinecone API error with status
+    const statusCode = e?.status || 500;
+
+    res.status(statusCode).json({
+      error: e?.message || "Failed to process assistant chat request",
+      type: e?.name || "PineconeError",
+      details: process.env.NODE_ENV === 'development' ? e?.stack : undefined
     });
   }
 }
 
 export const config = {
-  api: { 
+  api: {
     bodyParser: {
       sizeLimit: '1mb',
     }
