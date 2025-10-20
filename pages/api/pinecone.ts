@@ -1,4 +1,5 @@
 // pages/api/pinecone.ts
+// Trigger fresh deployment via GitHub webhook - 2025-10-20T10:24:00Z
 import type { NextApiRequest, NextApiResponse } from "next";
 import { Pinecone } from "@pinecone-database/pinecone";
 
